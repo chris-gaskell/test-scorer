@@ -1,0 +1,266 @@
+---
+title: "score-coverter"
+author: "Chris Gaskell"
+date: "21/06/2022"
+output: html_document
+---
+
+```{r libs}
+library(tidyverse)
+library(gt)
+library(reactable)
+library(reactablefmtr)
+```
+
+```{r}
+dat <- readr::read_csv("dat.csv")
+dat <- dat %>% drop_na(`Standard Score`)
+```
+
+```{r}
+gt(dat)
+```
+
+```{r}
+
+reactable(
+  dat,
+  # Defaults
+    defaultColDef = colDef(
+    #header = function(value) gsub(".", " ", value, fixed = TRUE),
+    #cell = function(value) format(value, nsmall = 0),
+    align = "center",
+    minWidth = 90,
+    headerStyle = list(#background = "#f7f7f8"
+      )
+  ),
+  
+  # # Specific Cols
+  columns = list(
+    "Standard Score" = colDef(minWidth = 100#sticky = "left", name = "Person"
+      ),
+   "Percentile Rank" = colDef(#minWidth = 120
+      ),
+    "Scaled Score" = colDef(#minWidth = 120, name = "Strength & Difficulties"
+      ),
+    "ETS Score" = colDef(#name = "Life Events"
+      ),
+    "Tscore" = colDef(name = "T-score"#minWidth = 120, na = "-", format = colFormat(
+      ),
+   "Zscore" = colDef(name = "Z-score"
+                     #filterable = T
+     ),
+   "Description" = colDef(minWidth = 180#filterable = T
+     )),
+  
+  # bordered = F,
+   highlight = TRUE,
+   defaultSorted = list("Standard Score" = "desc"),
+   defaultPageSize = 150,
+  # paginationType = "simple", 
+  # minRows = 10,
+  searchable = F,
+  striped = T,
+  height = 1000,
+  theme = nytimes()) %>% 
+  add_title("Pschometric Conversion Table")
+```
+
+```{r}
+library(tidyverse)
+library(magick)
+library(tesseract)
+
+raw_img <- image_read("wais.png")
+
+image_ggplot(raw_img)
+
+num_only <- combo <- tesseract::tesseract(
+    options = list(
+      tessedit_char_whitelist = paste0(
+        c(" ", "0123456789 - — _ 0-"), collapse = "")
+      )
+  )
+
+test <- 
+  raw_img %>% 
+  image_crop(geometry_area(1110, 603, 10, 110)) %>% 
+  image_quantize(colorspace = "gray")  %>% 
+   #image_transparent(color = "white", fuzz=0) %>% 
+   #image_background("white") %>% 
+  #image_negate() %>% # negate 
+#image_morphology(method = "Thinning", kernel = "Rectangle:20x1") %>%
+  #image_negate() %>% 
+#image_ggplot() %>% 
+  ocr(engine = num_only) 
+
+  test %>% 
+  str_split(pattern = "\n") %>% 
+  unlist() %>%
+  tibble(data = .) %>% 
+  filter(str_length(data) >= 2) %>%
+  separate(
+    data, 
+    into = c("Scaled Score", "BS", "SI", "DS", "MR", "VC", "AR", "SS", "VP", "IN", "CD", "LN", "FW", "CO", "CA", "PCm"), 
+    sep = c(" ")
+    )
+
+
+```
+
+```{r}
+library(tidyverse)
+library(magick)
+library(tesseract)
+
+raw_img <- image_read("wais/45-55.jpg")
+
+num_only <- combo <- tesseract::tesseract(
+    options = list(
+      tessedit_char_whitelist = paste0(
+        c("  ", " ", "0123456789", "", "-", "_", "0-"), collapse = c("  "," "))
+      )
+  )
+
+test <- 
+  raw_img %>% 
+  image_crop(geometry_area(1295, 699, 100, 235)) %>% # L Page
+  #image_crop(geometry_area(1300, 900, 100, 300)) %>% # R Page
+
+ #image_quantize(colorspace = "gray")  %>% 
+ image_transparent(color = "white", fuzz=15) %>%
+ #image_background("white") %>%
+  image_negate() %>% # negate
+  image_morphology(method = "Thinning", kernel = "Rectangle:35x1") %>%
+ image_negate() %>%
+ #image_ggplot() %>% 
+  ocr(engine = num_only) 
+
+test <- 
+  test %>% 
+  str_split(pattern = "\n") %>% 
+    #str_squish() %>% 
+  unlist() %>%
+  tibble(data = .) %>% 
+  filter(str_length(data) >= 2)
+
+#test <- as.data.frame(test)
+
+test <- 
+test %>% 
+  separate(
+    data, 
+    into = c("Scaled Score", "BD", "SI", "DS", "MR", "VC", "AR", "SS", "VP", "IN", "CD", "LN", "FW", "CO", "CA", "PCm"), 
+    sep = c(" ")
+    )
+
+
+```
+
+```{r}
+#test
+test <- asplit(test, 2)
+
+BD <- test[,1:2]
+
+
+BD <- separate_rows(BD, BD, sep = "-", convert = TRUE)
+#pad(Test2)
+
+BD <- 
+  BD %>%
+ #rowid_to_column() %>%
+ complete(BD = seq(min(BD), max(BD), 1), #nesting(rowid),
+          fill = list(count = 0)) %>%
+ #arrange(rowid) %>%
+ #group_by(rowid) %>%
+ fill(`Scaled Score`, .direction = "updown") 
+```
+
+```{r}
+bdsi_df <- test %>% select(1:3)
+
+bdsi_df <- separate_rows(bdsi_df, c(BD, SI), sep = "-", convert = TRUE)
+
+bdsi_df <- bdsi_df %>% mutate(across(c(2:3), na_if, "_"))
+
+bdsi_df$SI <- as.numeric(bdsi_df$SI)
+
+
+test <- bdsi_df %>%
+  complete(BD = seq(min(BD), max(BD), 1), #nesting(rowid),
+          fill = list(count = 0)) %>%
+   fill(`Scaled Score`, .direction = "updown") %>%
+   fill(SI, .direction = "updown") %>%
+  complete(SI = seq(min(SI), max(SI), 1), #nesting(rowid),
+          fill = list(count = 0)) %>%
+   fill(c(BD, `Scaled Score`), .direction = "updown")
+
+
+
+Test <- 
+
+%>%
+  accumulate(SI, ~ifelse(is.na(.y), .x + 1, .y))
+
+
+   fill(SI, #.direction = "updown"
+        ) 
+
+
+    complete(BD = seq(min(BD), max(BD), 1), #nesting(rowid),
+          fill = list(count = 0)) %>%
+  print(n = 50)
+
+complete(bdsi_df, `Scaled Score`, nesting(BD, SI))
+
+test %>%
+ #rowid_to_column() %>%
+ complete(BD = seq(min(BD), max(BD), 1), #nesting(rowid),
+          fill = list(count = 0)) %>%
+ #arrange(rowid) %>%
+ #group_by(rowid) %>%
+ fill(`Scaled Score`, .direction = "updown") 
+```
+
+
+```{r}
+# output to tibble
+cr_sacks <- tibble(
+  url_in = c(
+    "wais/16_18.jpg",
+    #"wais/18_20.jpg",
+    "wais/20_25.jpg"
+    )#,
+  #crop_left = c(1300, 900),
+  #crop_top = c(1300, 900)
+) %>% 
+  pmap_df(scrape_fun)
+
+cr_sacks
+
+
+
+scrape_fun <- function(url_in){
+  raw_img <- image_read(url_in) %>% 
+    image_quantize(colorspace = 'gray') %>%
+    image_transparent("white", fuzz=22) %>% 
+    image_background("white") %>%
+    image_threshold() %>% 
+    image_crop(geometry_area(1300, 900, 100, 300)) 
+  
+  image_ocr(raw_img) %>% 
+    str_c() %>% 
+    str_split(pattern = "\n") %>% 
+    unlist() %>%
+    tibble(data = .) %>% 
+    filter(str_length(data) >= 2) %>% 
+  separate(
+    data, 
+    into = c("Scaled Score", "BS", "SI", "DS", "MR", "VC", "AR", "SS", "VP", "IN", "CD", "LN", "FW", "CO", "CA", "PCm"), 
+    sep = c(" ", "  ")
+    )
+}
+
+```
+
